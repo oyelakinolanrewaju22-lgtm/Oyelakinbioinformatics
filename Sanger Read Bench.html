@@ -1,0 +1,1291 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Sanger Read Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+:root{
+  /* Layout: one working column. Intake and sample controls first, then summary, trace, sequence, ORFs and alignment as stacked panels. */
+  --bg:#EEF1F4; --surface:#FFFFFF; --ink:#101A24; --muted:#586878; --line:#D5DCE3;
+  --accent:#B45309; --accent-ink:#8A3F05; --accent-soft:#FBE8CF; --on-accent:#FFFFFF;
+  --dye-a:#1F9D55; --dye-c:#2563EB; --dye-g:#1B2530; --dye-t:#DC2626;
+  --q-good:#8EA0B3; --q-mid:#D9A03A; --q-bad:#D9534F;
+  --warn-bg:#FBEBC9; --bad-bg:#F8D5D3; --trim-shade:rgba(88,104,120,.17);
+  --font-display:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141A; --surface:#151D25; --ink:#E6ECF2; --muted:#93A3B3; --line:#27333F;
+    --accent:#F0A04B; --accent-ink:#F5B97A; --accent-soft:#3A2A15; --on-accent:#1A1005;
+    --dye-a:#4ADE80; --dye-c:#60A5FA; --dye-g:#E5ECF3; --dye-t:#F87171;
+    --q-good:#5C7185; --q-mid:#D8A23C; --q-bad:#E5625E;
+    --warn-bg:#40331A; --bad-bg:#4F2624; --trim-shade:rgba(0,0,0,.38);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141A; --surface:#151D25; --ink:#E6ECF2; --muted:#93A3B3; --line:#27333F;
+  --accent:#F0A04B; --accent-ink:#F5B97A; --accent-soft:#3A2A15; --on-accent:#1A1005;
+  --dye-a:#4ADE80; --dye-c:#60A5FA; --dye-g:#E5ECF3; --dye-t:#F87171;
+  --q-good:#5C7185; --q-mid:#D8A23C; --q-bad:#E5625E;
+  --warn-bg:#40331A; --bad-bg:#4F2624; --trim-shade:rgba(0,0,0,.38);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:24px 48px;
+}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2{font-family:var(--font-display);margin:0;text-wrap:balance}
+h1{font-size:30px;line-height:1.1;font-weight:700;letter-spacing:-.01em}
+h2{font-size:17px;font-weight:600}
+.sub{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.panel>header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:12px}
+.panel>header .tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+.btn{font:inherit;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:7px 12px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.small{padding:4px 9px;font-size:13px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,.focusable:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=number],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+select{max-width:100%;min-width:180px}
+input[type=range]{accent-color:var(--accent);width:100%;min-width:140px}
+textarea{width:100%;font-family:var(--font-mono);font-size:12.5px;resize:vertical}
+.drop{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;border:1.5px dashed var(--line);border-radius:6px;padding:18px}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop strong{display:block;font-family:var(--font-display);font-size:16px}
+.drop .hint{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+details.paste{margin-top:12px}
+details.paste summary{cursor:pointer;color:var(--accent-ink);font-weight:500}
+details.paste .inner{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-top:8px}
+.msg{margin:10px 0 0;min-height:1.2em;color:var(--muted)}
+.msg.err{color:var(--q-bad);font-weight:500}
+.bar{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
+.bar .field{min-width:0}
+.bar .grow{flex:1 1 220px}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 8px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink)}
+.check{display:flex;align-items:center;gap:8px;padding-bottom:6px}
+.check input{accent-color:var(--accent)}
+output{font-family:var(--font-mono);color:var(--ink);text-transform:none;letter-spacing:0;margin-left:6px}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:20px}
+.sum>*{min-width:0}
+dl.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px 18px;margin:0}
+dl.stats dt{font-size:12px;color:var(--muted)}
+dl.stats dd{margin:2px 0 0;font-family:var(--font-mono);font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.chrom-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+.chrom-spacer{position:relative}
+.chrom-spacer canvas{position:sticky;left:0;display:block}
+.chrom-info{font-family:var(--font-mono);font-size:12.5px;color:var(--muted);min-height:1.5em}
+.zoom{display:flex;align-items:center;gap:8px;min-width:160px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.seq{font-family:var(--font-mono);font-size:13px;line-height:1.95;overflow-x:auto}
+.sl{white-space:nowrap}
+.sn{display:inline-block;width:5ch;margin-right:1.2ch;text-align:right;color:var(--muted);user-select:none}
+.sg{margin-right:1ch}
+.b{cursor:pointer}
+.b-A{color:var(--dye-a)}.b-C{color:var(--dye-c)}.b-G{color:var(--dye-g)}.b-T{color:var(--dye-t)}
+.b-N,.b-R,.b-Y,.b-S,.b-W,.b-K,.b-M,.b-B,.b-D,.b-H,.b-V{color:var(--muted)}
+.ql{background:var(--bad-bg)}.qm{background:var(--warn-bg)}
+.tr{opacity:.4}
+.sel{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:4px}
+.foc{outline:2px solid var(--accent);outline-offset:-1px}
+.measure{position:absolute;visibility:hidden;white-space:pre;font:13px var(--font-mono);left:-9999px;top:0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:14px}
+.two>*{min-width:0}
+.scroll-x{overflow-x:auto}
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:6px 10px;border-bottom:1px solid var(--line);font-family:var(--font-mono);white-space:nowrap}
+.tbl tr.pick{background:var(--accent-soft)}
+.tbl tbody tr[data-k]{cursor:pointer}
+.tbl .note-cell{font-family:var(--font-body);white-space:normal;min-width:180px}
+.lowq{color:var(--q-bad);font-weight:600}
+.prot{font-family:var(--font-mono);font-size:13px;line-height:1.7;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px 12px;margin:0;white-space:pre-wrap}
+.field-row{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 20px}
+.field-row input[type=number]{width:96px}
+.aln{font-family:var(--font-mono);font-size:12.5px;line-height:1.55;white-space:pre;overflow-x:auto;margin:0}
+.aln .mm{background:var(--accent-soft);color:var(--accent-ink);font-weight:700}
+.aln .gp{color:var(--q-bad);font-weight:700}
+.aln .dim{color:var(--muted)}
+.aln .res{color:var(--accent-ink);font-weight:700}
+canvas.cmap{display:block;max-width:100%}
+.empty{color:var(--muted);margin:0}
+@media (prefers-reduced-motion: no-preference){.btn,.drop{transition:border-color .12s,background-color .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Sanger Read Bench</h1>
+    <p class="sub">Look at a Sanger trace or a short sequence, trim it by quality, find open reading frames and align it to a reference. Files are read in your browser and never uploaded.</p>
+  </header>
+
+  <section class="panel" aria-label="Load data">
+    <div class="drop" id="drop">
+      <div>
+        <strong>Drop files here</strong>
+        <span class="hint">.ab1 traces, FASTA, FASTQ or GenBank. Several files at once are fine.</span>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btnOpen" type="button">Open files</button>
+        <button class="btn" id="btnExample" type="button">Load example read</button>
+      </div>
+    </div>
+    <details class="paste">
+      <summary>Paste a sequence instead</summary>
+      <div class="inner">
+        <label for="pasteText" class="lbl">Raw bases or FASTA</label>
+        <textarea id="pasteText" rows="4" spellcheck="false" placeholder="ATGGCTAGCAAAGGAGAAGAACTT..."></textarea>
+        <button class="btn" id="btnPaste" type="button">Analyse pasted sequence</button>
+      </div>
+    </details>
+    <input type="file" id="fileInput" multiple accept=".ab1,.abi,.fasta,.fa,.fna,.fastq,.fq,.gb,.gbk,.txt,.seq" hidden>
+    <p id="msg" class="msg" role="status" aria-live="polite"></p>
+    <button class="btn small" id="btnToCons" type="button" hidden>Go to consensus</button>
+  </section>
+
+  <section class="panel bar" id="sampleBar" aria-label="Sample and trimming">
+    <div class="field">
+      <label for="sampleSelect" class="lbl">Sample</label>
+      <select id="sampleSelect"></select>
+    </div>
+    <div class="field">
+      <span class="lbl">Data</span>
+      <span id="recBadge" class="badge"></span>
+    </div>
+    <div class="field grow">
+      <label for="qcut" class="lbl">Trim threshold<output id="qcutVal" for="qcut">Q15</output></label>
+      <input type="range" id="qcut" min="5" max="30" step="1" value="15">
+    </div>
+    <label class="check" for="useTrim"><input type="checkbox" id="useTrim" checked> Analyse trimmed region only</label>
+    <button class="btn" id="btnFlip" type="button">Reverse complement</button>
+  </section>
+
+  <section class="panel" aria-labelledby="hSum">
+    <header><h2 id="hSum">Read summary</h2></header>
+    <div class="sum">
+      <div>
+        <dl class="stats" id="stats"></dl>
+        <p class="note" id="statsNote"></p>
+      </div>
+      <div id="qprofBox">
+        <span class="lbl">Quality along the read</span>
+        <canvas id="qprof" role="img" aria-label="Smoothed Phred quality along the read, with the retained region shaded"></canvas>
+        <p class="note" id="qprofNote"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="chromPanel" aria-labelledby="hChrom">
+    <header>
+      <h2 id="hChrom">Chromatogram</h2>
+      <div class="tools">
+        <div class="legend" style="margin:0">
+          <span><i class="sw" style="background:var(--dye-a)"></i>A</span>
+          <span><i class="sw" style="background:var(--dye-c)"></i>C</span>
+          <span><i class="sw" style="background:var(--dye-g)"></i>G</span>
+          <span><i class="sw" style="background:var(--dye-t)"></i>T</span>
+        </div>
+        <label class="zoom" for="zoom"><span class="lbl" style="margin:0">Zoom</span><input type="range" id="zoom" min="0.8" max="4" step="0.1" value="1.6"></label>
+      </div>
+    </header>
+    <div class="chrom-info" id="chromInfo">Click a peak or a base to inspect it. Arrow keys move along the read.</div>
+    <div class="chrom-scroll focusable" id="chromScroll" tabindex="0" aria-label="Chromatogram, scrolls sideways">
+      <div class="chrom-spacer" id="chromSpacer"><canvas id="chrom" role="img" aria-label="Four-colour Sanger chromatogram with base calls and quality bars"></canvas></div>
+    </div>
+    <p class="note">Bars above the letters show base quality. Grey areas are removed by trimming.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="hSeq">
+    <header>
+      <h2 id="hSeq">Sequence</h2>
+      <div class="tools"><button class="btn small" id="btnCopyFasta" type="button">Copy FASTA</button></div>
+    </header>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--bad-bg);border:1px solid var(--line)"></i>Quality below Q20</span>
+      <span><i class="sw" style="background:var(--warn-bg);border:1px solid var(--line)"></i>Q20 to Q29</span>
+      <span><i class="sw" style="background:var(--muted);opacity:.4"></i>Removed by trimming</span>
+      <span><i class="sw" style="background:var(--accent)"></i>Selected ORF</span>
+    </div>
+    <div class="seq" id="seqView"></div>
+    <label for="fastaOut" class="lbl" style="margin-top:14px">Analysed region as FASTA</label>
+    <textarea id="fastaOut" rows="4" readonly spellcheck="false"></textarea>
+  </section>
+
+  <section class="panel" aria-labelledby="hOrf">
+    <header>
+      <h2 id="hOrf">Open reading frames</h2>
+      <div class="field-row">
+        <div><label for="minOrf" class="lbl">Minimum length (aa)</label><input type="number" id="minOrf" min="10" max="2000" step="5" value="40"></div>
+      </div>
+    </header>
+    <div id="orfBody"></div>
+    <div id="orfProtWrap" hidden>
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;margin:14px 0 6px">
+        <span class="lbl" style="margin:0" id="protTitle"></span>
+        <button class="btn small" id="btnCopyProt" type="button">Copy protein</button>
+      </div>
+      <pre class="prot" id="protBox"></pre>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="hAln">
+    <header><h2 id="hAln">Align to a reference</h2></header>
+    <label for="refInput" class="lbl">Reference sequence (FASTA or raw bases)</label>
+    <textarea id="refInput" rows="4" spellcheck="false" placeholder="Paste a reference such as a plasmid or gene sequence"></textarea>
+    <p class="note" id="refNote"></p>
+    <div id="alnBody" style="margin-top:12px"></div>
+  </section>
+
+  <section class="panel" id="consPanel" aria-labelledby="hCons">
+    <header>
+      <h2 id="hCons">Consensus from forward and reverse reads</h2>
+      <div class="tools">
+        <button class="btn small" id="btnCopyCons" type="button" disabled>Copy FASTA</button>
+        <button class="btn small primary" id="btnUseCons" type="button" disabled>Use as sample</button>
+      </div>
+    </header>
+    <div class="field-row">
+      <div><label for="consF" class="lbl">Forward read</label><select id="consF"></select></div>
+      <div><label for="consR" class="lbl">Reverse read</label><select id="consR"></select></div>
+      <div><button class="btn" id="btnSwap" type="button">Swap</button></div>
+      <div>
+        <label for="consOrient" class="lbl">Reverse read direction</label>
+        <select id="consOrient">
+          <option value="auto">Detect automatically</option>
+          <option value="rc">Reverse complement it</option>
+          <option value="asis">Use as it is</option>
+        </select>
+      </div>
+      <div><label for="consMargin" class="lbl">Quality margin (Q)</label><input type="number" id="consMargin" min="0" max="40" step="1" value="10"></div>
+    </div>
+    <p class="note">Where the two reads disagree, the base from the better read wins if it leads by at least the margin. Closer calls get an ambiguity code such as R or Y.</p>
+    <p class="note" id="consNote"></p>
+    <div id="consBody" style="margin-top:12px"></div>
+    <label for="consOut" class="lbl" style="margin-top:14px">Consensus as FASTA</label>
+    <textarea id="consOut" rows="4" readonly spellcheck="false"></textarea>
+  </section>
+</div>
+<span class="measure" id="measure">MMMMMMMMMMMMMMMMMMMM</span>
+
+<script>
+// ==CORE-START==
+const COMP={A:'T',C:'G',G:'C',T:'A',N:'N',R:'Y',Y:'R',S:'S',W:'W',K:'M',M:'K',B:'V',D:'H',H:'D',V:'B'};
+const IUPAC=/[^ACGTNRYSWKMBDHV]/g;
+function revcomp(s){const o=[];for(let i=s.length-1;i>=0;i--)o.push(COMP[s[i]]||'N');return o.join('');}
+function normBases(s){return s.toUpperCase().replace(/U/g,'T').replace(IUPAC,'N');}
+function cleanSeq(raw){
+  const up=raw.toUpperCase();
+  const letters=(up.match(/[A-Z]/g)||[]).length;
+  const core=(up.match(/[ACGTUN]/g)||[]).length;
+  if(letters>0&&core<0.85*letters)throw new Error('This does not look like a DNA sequence.');
+  return up.replace(/U/g,'T').replace(IUPAC,'');
+}
+function parseFasta(text){
+  const recs=[];let cur=null;
+  for(const line of text.split(/\r?\n/)){
+    if(line.startsWith('>')){cur={name:line.slice(1).trim().split(/\s+/)[0]||'sequence',raw:''};recs.push(cur);}
+    else if(cur)cur.raw+=line.trim();
+  }
+  return recs.filter(r=>r.raw).map(r=>({name:r.name,seq:cleanSeq(r.raw),qual:null,trace:null,kind:'fasta'}));
+}
+function parseFastq(text){
+  const lines=text.split(/\r?\n/);const out=[];let i=0;
+  while(i<lines.length){
+    if(!lines[i]){i++;continue;}
+    if(lines[i][0]!=='@')throw new Error('FASTQ record does not start with @ on line '+(i+1)+'.');
+    const name=lines[i].slice(1).trim().split(/\s+/)[0]||'read';
+    const seq=lines[i+1],q=lines[i+3];
+    if(seq===undefined||q===undefined)break;
+    if(q.length!==seq.length)throw new Error('Quality string length differs from sequence length for '+name+'.');
+    out.push({name,seq:normBases(seq.trim()),qual:Array.from(q.trim(),c=>Math.max(0,c.charCodeAt(0)-33)),trace:null,kind:'fastq'});
+    i+=4;
+  }
+  return out;
+}
+function parseGenBank(text){
+  const out=[];
+  for(const b of text.split(/^\/\/\s*$/m)){
+    const lm=b.match(/^LOCUS\s+(\S+)/m);if(!lm)continue;
+    const oi=b.search(/^ORIGIN/m);if(oi<0)continue;
+    const raw=b.slice(oi).replace(/^ORIGIN.*$/m,'').replace(/[^A-Za-z]/g,'');
+    if(raw)out.push({name:lm[1],seq:cleanSeq(raw),qual:null,trace:null,kind:'genbank'});
+  }
+  return out;
+}
+function parseText(text,fallbackName){
+  const t=text.replace(/^﻿/,'').trimStart();
+  let recs;
+  if(t.startsWith('>'))recs=parseFasta(t);
+  else if(t.startsWith('@'))recs=parseFastq(t);
+  else if(/^LOCUS\s/.test(t))recs=parseGenBank(t);
+  else recs=[{name:fallbackName,seq:cleanSeq(t),qual:null,trace:null,kind:'raw'}];
+  recs=recs.filter(r=>r.seq.length>0);
+  if(!recs.length)throw new Error('No sequence found in this file.');
+  return recs;
+}
+function ascii(dv,o,n){let s='';for(let i=0;i<n;i++)s+=String.fromCharCode(dv.getUint8(o+i));return s;}
+function traceYMax(t){
+  const v=[];
+  for(const k of ['A','C','G','T']){const a=t.channels[k];for(let i=0;i<a.length;i+=2)v.push(a[i]);}
+  v.sort((x,y)=>x-y);
+  return Math.max(50,v[Math.min(v.length-1,Math.floor(v.length*0.998))]||1);
+}
+function parseABIF(buf){
+  const dv=new DataView(buf);
+  if(buf.byteLength<34||ascii(dv,0,4)!=='ABIF')throw new Error('Not an ABIF (.ab1) file.');
+  const num=dv.getInt32(18),dirOff=dv.getInt32(26);
+  if(dirOff<=0||num<=0||dirOff+num*28>buf.byteLength)throw new Error('The ABIF directory is damaged.');
+  const E={};
+  for(let i=0;i<num;i++){
+    const o=dirOff+i*28;
+    const key=ascii(dv,o,4)+dv.getInt32(o+4);
+    const size=dv.getInt32(o+16);
+    E[key]={type:dv.getInt16(o+8),esize:dv.getInt16(o+10),n:dv.getInt32(o+12),off:size<=4?o+20:dv.getInt32(o+20)};
+  }
+  const get=key=>{
+    const e=E[key];if(!e)return null;
+    const n=e.n,off=e.off;
+    if(off<0||n<0||off+n*Math.max(1,e.esize)>buf.byteLength)return null;
+    switch(e.type){
+      case 2:return ascii(dv,off,n);
+      case 1:{const a=new Array(n);for(let i=0;i<n;i++)a[i]=dv.getUint8(off+i);return a;}
+      case 3:{const a=new Uint16Array(n);for(let i=0;i<n;i++)a[i]=dv.getUint16(off+i*2);return a;}
+      case 4:{const a=new Int16Array(n);for(let i=0;i<n;i++)a[i]=dv.getInt16(off+i*2);return a;}
+      case 5:{const a=new Int32Array(n);for(let i=0;i<n;i++)a[i]=dv.getInt32(off+i*4);return a;}
+      case 18:return ascii(dv,off+1,dv.getUint8(off));
+      case 19:return ascii(dv,off,Math.max(0,n-1));
+      default:return null;
+    }
+  };
+  const fwo=(get('FWO_1')||'GATC').toUpperCase();
+  const channels={};
+  ['DATA9','DATA10','DATA11','DATA12'].forEach((k,i)=>{
+    const a=get(k);const base=fwo[i];
+    if(a&&'ACGT'.includes(base))channels[base]=Int16Array.from(a);
+  });
+  if(!['A','C','G','T'].every(b=>channels[b]))throw new Error('This file has no analysed trace data (DATA9 to DATA12).');
+  const bases=get('PBAS2')||get('PBAS1');
+  const locs=get('PLOC2')||get('PLOC1');
+  if(!bases||!locs)throw new Error('This file has no base calls or peak positions.');
+  const qual0=get('PCON2')||get('PCON1');
+  const n=Math.min(bases.length,locs.length);
+  const length=channels.A.length;
+  const trace={channels,length,locs:Array.from(locs).slice(0,n)};
+  trace.ymax=traceYMax(trace);
+  const qual=qual0?Array.from({length:n},(_,i)=>qual0[i]||0):null;
+  return{name:(get('SMPL1')||'').trim(),seq:normBases(bases.slice(0,n)),qual,trace,kind:'ab1',flipped:false};
+}
+function flipRecord(r){
+  const o={...r,seq:revcomp(r.seq),qual:r.qual?r.qual.slice().reverse():null,flipped:!r.flipped};
+  if(r.trace){
+    const t=r.trace;
+    const rv=a=>{const m=a.length,x=new Int16Array(m);for(let i=0;i<m;i++)x[i]=a[m-1-i];return x;};
+    o.trace={channels:{A:rv(t.channels.T),C:rv(t.channels.G),G:rv(t.channels.C),T:rv(t.channels.A)},length:t.length,locs:t.locs.slice().reverse().map(x=>t.length-1-x),ymax:t.ymax};
+  }
+  return o;
+}
+function mottTrim(qual,qcut){
+  const pcut=Math.pow(10,-qcut/10);
+  let best=0,bs=0,be=0,cur=0,cs=0;
+  for(let i=0;i<qual.length;i++){
+    const sc=pcut-Math.pow(10,-qual[i]/10);
+    if(cur+sc>0){if(cur===0)cs=i;cur+=sc;if(cur>best){best=cur;bs=cs;be=i+1;}}
+    else cur=0;
+  }
+  return[bs,be];
+}
+function baseStats(seq,qual){
+  const n=seq.length;let a=0,c=0,g=0,t=0,amb=0;
+  for(let i=0;i<n;i++){const ch=seq[i];if(ch==='A')a++;else if(ch==='C')c++;else if(ch==='G')g++;else if(ch==='T')t++;else amb++;}
+  const un=a+c+g+t;
+  const o={n,a,c,g,t,amb,gc:un?(g+c)/un*100:0};
+  if(qual&&n){
+    let sum=0,q20=0,q30=0,run=0,best=0;
+    for(const q of qual){sum+=q;if(q>=20){q20++;run++;if(run>best)best=run;}else run=0;if(q>=30)q30++;}
+    o.meanQ=sum/n;o.q20=q20/n*100;o.q30=q30/n*100;o.run20=best;
+  }
+  return o;
+}
+const AA='FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
+const CI={T:0,C:1,A:2,G:3};
+function translate(seq){
+  let p='';
+  for(let i=0;i+3<=seq.length;i+=3){
+    const a=CI[seq[i]],b=CI[seq[i+1]],c=CI[seq[i+2]];
+    p+=(a===undefined||b===undefined||c===undefined)?'X':AA[a*16+b*4+c];
+  }
+  return p;
+}
+function findOrfs(seq,minAA){
+  const res=[],L=seq.length;
+  const scan=(s,strand)=>{
+    const add=(st,en,stop,f)=>{
+      const aa=(en-st)/3-(stop?1:0);
+      if(aa<minAA)return;
+      const protein=translate(s.slice(st,en)).replace(/\*$/,'');
+      res.push({strand,frame:f+1,start:strand==='+'?st:L-en,end:strand==='+'?en:L-st,aa,stop,protein});
+    };
+    for(let f=0;f<3;f++){
+      let st=-1;
+      for(let i=f;i+3<=L;i+=3){
+        const c=s.substr(i,3);
+        if(st<0){if(c==='ATG')st=i;}
+        else if(c==='TAA'||c==='TAG'||c==='TGA'){add(st,i+3,true,f);st=-1;}
+      }
+      if(st>=0)add(st,st+Math.floor((L-st)/3)*3,false,f);
+    }
+  };
+  scan(seq,'+');scan(revcomp(seq),'-');
+  res.sort((x,y)=>y.aa-x.aa);
+  return res;
+}
+function localAlign(q,r){
+  const SC={match:2,mis:-3,gap:-4};
+  const n=q.length,m=r.length;
+  if(!n||!m)return{score:0};
+  if(n*m>6e7)throw new Error('The read and reference are too large to align here (limit about 60 million cells).');
+  const W=m+1,tb=new Uint8Array((n+1)*W);
+  let prev=new Int32Array(W),cur=new Int32Array(W);
+  let best=0,bi=0,bj=0;
+  for(let i=1;i<=n;i++){
+    cur[0]=0;const qc=q.charCodeAt(i-1);
+    for(let j=1;j<=m;j++){
+      const rc=r.charCodeAt(j-1);
+      const s=(qc===78||rc===78)?0:(qc===rc?SC.match:SC.mis);
+      let h=prev[j-1]+s,d=1;
+      const up=prev[j]+SC.gap;if(up>h){h=up;d=2;}
+      const left=cur[j-1]+SC.gap;if(left>h){h=left;d=3;}
+      if(h<=0){h=0;d=0;}
+      cur[j]=h;tb[i*W+j]=d;
+      if(h>best){best=h;bi=i;bj=j;}
+    }
+    const t=prev;prev=cur;cur=t;
+  }
+  if(best===0)return{score:0};
+  let i=bi,j=bj;const a=[],b=[],qi=[],ri=[];
+  while(i>0&&j>0&&tb[i*W+j]!==0){
+    const d=tb[i*W+j];
+    if(d===1){a.push(q[i-1]);b.push(r[j-1]);qi.push(i-1);ri.push(j-1);i--;j--;}
+    else if(d===2){a.push(q[i-1]);b.push('-');qi.push(i-1);ri.push(-1);i--;}
+    else{a.push('-');b.push(r[j-1]);qi.push(-1);ri.push(j-1);j--;}
+  }
+  a.reverse();b.reverse();qi.reverse();ri.reverse();
+  let matches=0,mismatches=0,gaps=0,ambig=0;const mid=[];
+  for(let k=0;k<a.length;k++){
+    if(a[k]==='-'||b[k]==='-'){gaps++;mid.push(' ');}
+    else if(a[k]===b[k]){matches++;mid.push('|');}
+    else if(a[k]==='N'||b[k]==='N'){ambig++;mid.push(' ');}
+    else{mismatches++;mid.push(' ');}
+  }
+  return{score:best,a:a.join(''),b:b.join(''),mid:mid.join(''),qi,ri,qStart:i,qEnd:bi,rStart:j,rEnd:bj,matches,mismatches,gaps,ambig,len:a.length,identity:matches/a.length*100};
+}
+function alignBoth(q,qual,r){
+  const f=localAlign(q,r);
+  const rq=revcomp(q);
+  const b=localAlign(rq,r);
+  if(b.score>f.score)return{...b,strand:'-',n:q.length,qual:qual?qual.slice().reverse():null};
+  return{...f,strand:'+',n:q.length,qual:qual||null};
+}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function simulateRead(rnd,truth,subs,orfStart){
+  const n=truth.length;
+  const isStop=c=>c==='TAA'||c==='TAG'||c==='TGA';
+  const read=truth.split('');
+  for(const s of subs){
+    const p=s.p,cs=orfStart===null?p:p-((p-orfStart)%3);
+    for(const alt of 'ACGT'){
+      if(alt===truth[p])continue;
+      if(orfStart!==null){const codon=read.slice(cs,cs+3);codon[p-cs]=alt;if(isStop(codon.join('')))continue;}
+      read[p]=alt;break;
+    }
+  }
+  const q=[];
+  for(let i=0;i<n;i++){
+    let v;
+    if(i<18)v=6+i*0.9+(rnd()-.5)*4;
+    else if(i<40)v=22+(i-18)*1.2+(rnd()-.5)*6;
+    else if(i<0.84*n)v=50+(rnd()-.5)*14;
+    else v=Math.max(3,46-(i-0.84*n)*0.55+(rnd()-.5)*12);
+    q.push(Math.max(2,Math.min(60,Math.round(v))));
+  }
+  for(const s of subs)q[s.p]=s.q;
+  const pos=new Set(subs.map(s=>s.p));
+  const spacing=10.5,first=20;
+  const locs=[];for(let i=0;i<n;i++)locs.push(Math.round(first+i*spacing));
+  const len=locs[n-1]+24;
+  const ch={A:new Float32Array(len),C:new Float32Array(len),G:new Float32Array(len),T:new Float32Array(len)};
+  const gauss=(arr,c,amp,sig)=>{const r=Math.ceil(sig*4);for(let s=Math.max(0,c-r);s<=Math.min(len-1,c+r);s++){const x=(s-c)/sig;arr[s]+=amp*Math.exp(-0.5*x*x);}};
+  for(let i=0;i<n;i++){
+    const quality=q[i];
+    const amp=(500+rnd()*1000)*(0.3+0.7*Math.min(1,quality/38));
+    const sig=2.3+(1-Math.min(1,quality/38))*1.3;
+    const called=read[i];
+    const mixed=pos.has(i);
+    gauss(ch[called],locs[i],mixed?amp*0.55:amp,sig);
+    if(mixed)gauss(ch[truth[i]],locs[i],amp*0.5,sig);
+    else if(quality<26){
+      const others='ACGT'.replace(called,'');
+      gauss(ch[others[Math.floor(rnd()*3)]],locs[i]+Math.round((rnd()-.5)*3),amp*(0.25+rnd()*0.35),sig);
+    }
+  }
+  const channels={};
+  for(const k of 'ACGT')channels[k]=new Int16Array(len);
+  for(let s=0;s<len;s++){
+    const i=Math.min(n-1,Math.max(0,Math.round((s-first)/spacing)));
+    const na=4+(1-Math.min(1,q[i]/45))*40;
+    for(const k of 'ACGT')channels[k][s]=Math.max(0,Math.round(ch[k][s]+(rnd()-.5)*2*na));
+  }
+  const trace={channels,length:len,locs};
+  trace.ymax=traceYMax(trace);
+  return{seq:read.join(''),qual:q,trace};
+}
+function makeExample(){
+  const rnd=mulberry32(20261104);
+  const pick=n=>{let s='';for(let i=0;i<n;i++)s+='ACGT'[Math.floor(rnd()*4)];return s;};
+  const isStop=c=>c==='TAA'||c==='TAG'||c==='TGA';
+  let cod='';
+  const antiStops=['TTA','CTA','TCA'];
+  for(let i=0;i<130;i++){
+    let c;
+    if(i%9===4)c=antiStops[Math.floor(rnd()*3)];
+    else do{c=pick(3);}while(isStop(c));
+    cod+=c;
+  }
+  const orfStart=38;
+  const front=pick(orfStart)+'ATG'+cod+'TAA'+pick(120);
+  const fwd=simulateRead(rnd,front,[{p:212,q:14},{p:377,q:18}],orfStart);
+  const template=front+pick(330);
+  const revTruth=revcomp(template.slice(template.length-560));
+  const rev=simulateRead(rnd,revTruth,[{p:453,q:12},{p:520,q:16}],null);
+  return{
+    rec:{name:'Example_read_F01',...fwd,kind:'example',flipped:false},
+    rev:{name:'Example_read_R01',...rev,kind:'example',flipped:false},
+    ref:template
+  };
+}
+const PAIR={AC:'M',AG:'R',AT:'W',CG:'S',CT:'Y',GT:'K'};
+function iupacOf(a,b){if(a===b)return a;return PAIR[[a,b].sort().join('')]||'N';}
+function callQ(qw,ql){
+  const pw=Math.pow(10,-qw/10),pl=Math.pow(10,-ql/10);
+  return Math.max(2,Math.min(60,Math.round(-10*Math.log10(pw/(pw+pl)))));
+}
+function buildConsensus(f,r,opt){
+  opt=opt||{};
+  const margin=opt.margin===undefined?10:opt.margin,orient=opt.orient||'auto',minOverlap=opt.minOverlap||20;
+  const F=f.seq,Fq=f.qual?f.qual.slice():new Array(F.length).fill(30);
+  const R0=r.seq,Rq0=r.qual?r.qual.slice():new Array(R0.length).fill(30);
+  const rc={seq:revcomp(R0),qual:Rq0.slice().reverse()};
+  let A,Aq,flipped,al;
+  if(orient==='rc'){A=rc.seq;Aq=rc.qual;flipped=true;al=localAlign(A,F);}
+  else if(orient==='asis'){A=R0;Aq=Rq0;flipped=false;al=localAlign(A,F);}
+  else{
+    const a1=localAlign(R0,F),a2=localAlign(rc.seq,F);
+    if(a2.score>a1.score){A=rc.seq;Aq=rc.qual;flipped=true;al=a2;}else{A=R0;Aq=Rq0;flipped=false;al=a1;}
+  }
+  if(!al.a||al.len<minOverlap||al.identity<80)return{ok:false,flipped,overlap:al.len||0,identity:al.identity||0};
+  const nf=F.length,na=A.length,cols=[];
+  const colF=fi=>({f:F[fi],r:' ',fi,ai:-1,c:F[fi],q:Fq[fi],kind:'F',fq:Fq[fi],rq:null});
+  const colR=ai=>({f:' ',r:A[ai],fi:-1,ai,c:A[ai],q:Aq[ai],kind:'R',fq:null,rq:Aq[ai]});
+  const lf=al.rStart,la=al.qStart,rf=nf-al.rEnd,ra=na-al.qEnd;
+  const leftConflict=lf>0&&la>0,rightConflict=rf>0&&ra>0;
+  if(lf>0&&(la===0||lf>=la)){for(let i=0;i<lf;i++)cols.push(colF(i));}
+  else{for(let i=0;i<la;i++)cols.push(colR(i));}
+  const ov=[];
+  for(let k=0;k<al.len;k++){
+    const ai=al.qi[k],fi=al.ri[k];
+    ov.push({ai,fi,a:al.a[k],b:al.b[k],qa:ai>=0?Aq[ai]:null,qb:fi>=0?Fq[fi]:null});
+  }
+  const res=[];
+  for(let k=0;k<ov.length;k++){
+    const o=ov[k];
+    if(o.a==='-'||o.b==='-'){res.push(null);continue;}
+    const base={f:o.b,r:o.a,fi:o.fi,ai:o.ai,fq:o.qb,rq:o.qa};
+    if(o.a===o.b)res.push({...base,c:o.a,q:o.a==='N'?2:Math.min(60,o.qa+o.qb),kind:'agree'});
+    else if(!'ACGT'.includes(o.a))res.push({...base,c:o.b,q:o.qb,kind:'agree'});
+    else if(!'ACGT'.includes(o.b))res.push({...base,c:o.a,q:o.qa,kind:'agree'});
+    else{
+      const d=o.qa-o.qb;
+      if(Math.abs(d)>=margin){
+        const revWins=d>0;
+        res.push({...base,c:revWins?o.a:o.b,q:callQ(revWins?o.qa:o.qb,revWins?o.qb:o.qa),kind:revWins?'rev':'fwd'});
+      }else res.push({...base,c:iupacOf(o.a,o.b),q:callQ(Math.max(o.qa,o.qb),Math.min(o.qa,o.qb)),kind:'amb'});
+    }
+  }
+  for(let k=0;k<ov.length;k++){
+    if(res[k])continue;
+    const o=ov[k];
+    const rBase=o.a!=='-';
+    const qx=rBase?o.qa:o.qb;
+    const has=p=>rBase?p.b!=='-':p.a!=='-';
+    const qOf=p=>rBase?p.qb:p.qa;
+    const nb=[];
+    for(let j=k-1;j>=0;j--){if(has(ov[j])){nb.push(qOf(ov[j]));break;}}
+    for(let j=k+1;j<ov.length;j++){if(has(ov[j])){nb.push(qOf(ov[j]));break;}}
+    const avg=nb.length?nb.reduce((s,v)=>s+v,0)/nb.length:0;
+    const base={f:rBase?'-':o.b,r:rBase?o.a:'-',fi:o.fi,ai:o.ai,fq:o.qb,rq:o.qa};
+    res[k]=qx>=avg?{...base,c:rBase?o.a:o.b,q:qx,kind:'indel-kept'}:{...base,c:'',q:null,kind:'indel-dropped'};
+  }
+  cols.push(...res);
+  if(rf>0&&(ra===0||rf>=ra)){for(let i=al.rEnd;i<nf;i++)cols.push(colF(i));}
+  else{for(let i=al.qEnd;i<na;i++)cols.push(colR(i));}
+  const seq=[],qual=[];let cp=0;
+  for(const c of cols){
+    if(c.c!==''){cp++;c.cpos=cp;seq.push(c.c);qual.push(c.q);}else c.cpos=null;
+    c.near=cp;
+  }
+  const conflicts=cols.filter(c=>c.kind==='fwd'||c.kind==='rev'||c.kind==='amb'||c.kind==='indel-kept'||c.kind==='indel-dropped');
+  return{ok:true,seq:seq.join(''),qual,cols,conflicts,flipped,overlapLen:al.len,identity:al.identity,leftConflict,rightConflict};
+}
+// ==CORE-END==
+
+// ===== UI =====
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S={recs:[],cur:-1,qcut:15,useTrim:true,minOrf:40,orfSel:0,orfKey:'',orfList:[],focus:-1,zoom:1.6,refIsExample:false,cons:{f:null,r:null,orient:'auto',margin:10}};
+let NEXT_ID=1,CR=null;
+let D=null;
+const CH=250,QH=26,LETTER_Y=46,TR_TOP=58;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function derived(){
+  const r=S.recs[S.cur];if(!r)return null;
+  const L=r.seq.length;
+  const trim=r.qual?mottTrim(r.qual,S.qcut):[0,L];
+  const reg=(S.useTrim&&r.qual)?trim:[0,L];
+  return{r,L,trim,reg,seq:r.seq.slice(reg[0],reg[1]),qual:r.qual?r.qual.slice(reg[0],reg[1]):null};
+}
+function showMsg(t,err){const m=$('msg');m.textContent=t||'';m.className='msg'+(err?' err':'');}
+function fmt(n){return n.toLocaleString('en-US');}
+function fitCanvas(c,w,h){
+  const d=window.devicePixelRatio||1;
+  if(c._w!==w||c._h!==h||c._d!==d){c.width=Math.round(w*d);c.height=Math.round(h*d);c.style.width=w+'px';c.style.height=h+'px';c._w=w;c._h=h;c._d=d;}
+  const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,w,h);return g;
+}
+
+// ---- loading ----
+function guessRole(name){
+  const f=/(?:^|[^A-Za-z])(?:F|fwd|forward)(?![A-Za-z])/i.test(name);
+  const r=/(?:^|[^A-Za-z])(?:R|rev|reverse)(?![A-Za-z])/i.test(name);
+  return f&&!r?'F':r&&!f?'R':null;
+}
+function consValid(){
+  const a=S.recs.find(r=>r.id===S.cons.f),b=S.recs.find(r=>r.id===S.cons.r);
+  return !!a&&!!b&&a.id!==b.id;
+}
+function autoPick(list){
+  const f=list.find(r=>guessRole(r.name)==='F'),r=list.find(x=>guessRole(x.name)==='R');
+  if(f&&r){S.cons.f=f.id;S.cons.r=r.id;return;}
+  if(list.length>=2){S.cons.f=list[0].id;S.cons.r=list[1].id;}
+}
+function addRecords(recs){
+  if(recs.some(r=>r.kind!=='example'&&r.kind!=='consensus'))S.recs=S.recs.filter(r=>r.kind!=='example');
+  recs.forEach(r=>{r.id=NEXT_ID++;});
+  const first=S.recs.length;
+  S.recs.push(...recs);
+  if(recs.length>=2)autoPick(recs);else if(!consValid())autoPick(S.recs);
+  selectRecord(first);
+}
+async function loadFiles(files){
+  const added=[],errs=[];
+  for(const f of files){
+    try{
+      if(f.size>50*1024*1024)throw new Error('This tool is meant for small files (under 50 MB).');
+      const buf=await f.arrayBuffer();
+      const head=new Uint8Array(buf,0,Math.min(4,buf.byteLength));
+      const base=f.name.replace(/\.[^.]+$/,'');
+      let recs;
+      if(head.length===4&&String.fromCharCode(...head)==='ABIF'){
+        const r=parseABIF(buf);if(!r.name)r.name=base;recs=[r];
+      }else recs=parseText(new TextDecoder().decode(buf),base);
+      added.push(...recs);
+    }catch(e){errs.push(f.name+': '+e.message);}
+  }
+  if(added.length){
+    if(S.refIsExample){$('refInput').value='';S.refIsExample=false;}
+    addRecords(added);
+    showMsg(`Loaded ${added.length} record${added.length>1?'s':''}.`+(errs.length?' Skipped: '+errs.join(' | '):''),errs.length>0);
+  }else showMsg(errs.join(' | ')||'No files were loaded.',true);
+}
+function loadExample(){
+  const ex=makeExample();
+  $('refInput').value='>Example_reference\n'+ex.ref.replace(/(.{70})/g,'$1\n').trim();
+  S.refIsExample=true;
+  S.recs=S.recs.filter(r=>r.kind!=='example');
+  addRecords([ex.rec,ex.rev]);
+  showMsg('Loaded a synthetic forward and reverse read pair with a few uncertain base calls. The reference and the consensus are filled in below.');
+}
+function selectRecord(i){
+  S.cur=i;S.focus=-1;S.orfKey='';
+  $('chromScroll').scrollLeft=0;
+  renderAll();
+}
+
+// ---- rendering ----
+function renderAll(){
+  D=derived();
+  renderBar();renderStats();renderQProf();renderChrom();renderSeq();renderOrfs();renderExport();renderAlign();renderConsensus();
+}
+function badgeText(r){
+  if(r.kind==='consensus')return 'Consensus of two reads';
+  const pre=r.kind==='example'?'Example data, synthetic. ':'';
+  if(r.trace)return pre+'Sanger trace with quality';
+  if(r.qual)return pre+'Sequence with quality';
+  return pre+'Sequence only';
+}
+function renderBar(){
+  const sel=$('sampleSelect');
+  sel.innerHTML=S.recs.map((r,i)=>`<option value="${i}">${esc(r.name)} (${fmt(r.seq.length)} bp)</option>`).join('');
+  sel.value=String(S.cur);
+  const r=D.r;
+  $('recBadge').textContent=badgeText(r);
+  $('qcut').disabled=!r.qual;$('useTrim').disabled=!r.qual;
+  $('qcutVal').textContent='Q'+S.qcut;
+  $('btnFlip').textContent=r.flipped?'Reverse complement (on)':'Reverse complement';
+  $('btnToCons').hidden=S.recs.length<2;
+}
+function renderStats(){
+  const d=D,r=d.r,a=baseStats(d.seq,d.qual);
+  const keep=d.trim[1]-d.trim[0];
+  const items=[['Read length',fmt(d.L)+' bp']];
+  if(r.qual)items.push(['Kept after trim',keep?`${fmt(keep)} bp (${d.trim[0]+1}–${d.trim[1]})`:'none']);
+  items.push(['GC content',a.n?a.gc.toFixed(1)+'%':'–'],['Ambiguous bases',String(a.amb)]);
+  if(a.meanQ!==undefined)items.push(['Mean quality','Q'+a.meanQ.toFixed(1)],['Bases ≥ Q20',a.q20.toFixed(1)+'%'],['Bases ≥ Q30',a.q30.toFixed(1)+'%'],['Longest Q20 run',fmt(a.run20)+' bp']);
+  $('stats').innerHTML=items.map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  $('statsNote').textContent=d.seq.length
+    ?`Statistics cover bases ${d.reg[0]+1}–${d.reg[1]} of the read.`
+    :'No bases pass the quality threshold. Lower the trim threshold to keep more of the read.';
+}
+function renderQProf(){
+  const box=$('qprofBox'),d=D;
+  if(!d.r.qual){$('qprof').style.display='none';$('qprofNote').textContent='This file has no per-base quality values, so trimming is off.';return;}
+  $('qprof').style.display='block';
+  const W=Math.max(220,Math.floor(box.clientWidth)),H=132;
+  const g=fitCanvas($('qprof'),W,H);
+  const L=d.L,q=d.r.qual,ml=30,mr=8,mt=8,mb=20,pw=W-ml-mr,ph=H-mt-mb;
+  const xs=i=>ml+(L>1?i/(L-1):0)*pw,ys=v=>mt+(1-Math.min(60,v)/60)*ph;
+  g.fillStyle=css('--accent-soft');
+  if(d.trim[1]>d.trim[0])g.fillRect(xs(d.trim[0]),mt,Math.max(2,xs(d.trim[1]-1)-xs(d.trim[0])),ph);
+  g.font='10px '+css('--font-mono');g.textBaseline='middle';g.textAlign='right';
+  for(const v of [0,20,30,60]){
+    g.strokeStyle=css('--line');g.lineWidth=1;g.setLineDash(v===20||v===30?[4,3]:[]);
+    g.beginPath();g.moveTo(ml,ys(v)+.5);g.lineTo(W-mr,ys(v)+.5);g.stroke();
+    g.fillStyle=css('--muted');g.fillText('Q'+v,ml-5,ys(v));
+  }
+  g.setLineDash([]);
+  g.strokeStyle=css('--ink');g.lineWidth=1.6;g.beginPath();
+  const w=4;
+  for(let i=0;i<L;i++){
+    let s=0,c=0;for(let k=Math.max(0,i-w);k<=Math.min(L-1,i+w);k++){s+=q[k];c++;}
+    const x=xs(i),y=ys(s/c);i?g.lineTo(x,y):g.moveTo(x,y);
+  }
+  g.stroke();
+  g.fillStyle=css('--muted');g.textBaseline='alphabetic';g.textAlign='left';g.fillText('1',ml,H-5);
+  g.textAlign='right';g.fillText(String(L),W-mr,H-5);
+  $('qprofNote').textContent='Line shows quality averaged over 9 bases. Shaded area is kept after trimming.';
+}
+
+// chromatogram
+function nearestBase(locs,s){
+  let lo=0,hi=locs.length-1;
+  while(lo<hi){const m=(lo+hi)>>1;if(locs[m]<s)lo=m+1;else hi=m;}
+  if(lo>0&&Math.abs(locs[lo-1]-s)<=Math.abs(locs[lo]-s))lo--;
+  return lo;
+}
+function renderChrom(){
+  const has=!!D.r.trace;
+  $('chromPanel').hidden=!has;
+  if(!has)return;
+  const t=D.r.trace;
+  $('chromSpacer').style.width=Math.ceil(t.length*S.zoom)+'px';
+  $('chromSpacer').style.height=CH+'px';
+  drawChrom();updateChromInfo();
+}
+function drawChrom(){
+  const d=D;if(!d||!d.r.trace||$('chromPanel').hidden)return;
+  const t=d.r.trace,sc=$('chromScroll'),vw=Math.floor(sc.clientWidth);
+  if(vw<10)return;
+  const g=fitCanvas($('chrom'),vw,CH);
+  const z=S.zoom,sl=sc.scrollLeft,ymax=t.ymax,locs=t.locs,n=locs.length;
+  const trBot=CH-20,trH=trBot-TR_TOP;
+  const X=s=>s*z-sl;
+  const sp=n>1?(locs[n-1]-locs[0])/(n-1):10;
+  const bw=Math.max(2,Math.min(9,sp*z*0.5));
+  // focus band
+  if(S.focus>=0&&S.focus<n){
+    g.fillStyle=css('--accent-soft');
+    g.fillRect(X(locs[S.focus])-sp*z/2,0,sp*z,CH);
+  }
+  // grid
+  g.strokeStyle=css('--line');g.lineWidth=1;
+  for(const f of [0.5,1]){const y=Math.round(trBot-f*trH)+.5;g.beginPath();g.moveTo(0,y);g.lineTo(vw,y);g.stroke();}
+  // traces
+  const s0=Math.max(0,Math.floor(sl/z)-2),s1=Math.min(t.length-1,Math.ceil((sl+vw)/z)+2);
+  const step=Math.max(1,Math.floor(1/z));
+  g.lineWidth=1.4;g.lineJoin='round';
+  for(const k of ['T','C','A','G']){
+    const arr=t.channels[k];
+    g.strokeStyle=css('--dye-'+k.toLowerCase());g.beginPath();
+    for(let s=s0;s<=s1;s+=step){
+      const y=trBot-Math.min(1,arr[s]/ymax)*trH;
+      s===s0?g.moveTo(X(s),y):g.lineTo(X(s),y);
+    }
+    g.stroke();
+  }
+  // bases, quality bars, ticks
+  const q=d.r.qual,seq=d.r.seq;
+  const first=Math.max(0,nearestBase(locs,sl/z)-2),last=Math.min(n-1,nearestBase(locs,(sl+vw)/z)+2);
+  const fs=Math.max(8,Math.min(13,sp*z*0.9));
+  g.font=`700 ${fs}px ${css('--font-mono')}`;g.textAlign='center';g.textBaseline='alphabetic';
+  const muted=css('--muted');
+  for(let i=first;i<=last;i++){
+    const x=X(locs[i]);
+    if(q){
+      const v=q[i];
+      g.fillStyle=css(v>=30?'--q-good':v>=20?'--q-mid':'--q-bad');
+      const h=Math.max(1,Math.min(60,v)/60*QH);
+      g.fillRect(x-bw/2,4+QH-h,bw,h);
+    }
+    const b=seq[i];
+    g.fillStyle='ACGT'.includes(b)?css('--dye-'+b.toLowerCase()):muted;
+    g.fillText(b,x,LETTER_Y);
+    if((i+1)%10===0){
+      g.fillStyle=muted;g.font=`400 10px ${css('--font-mono')}`;
+      g.fillText(String(i+1),x,CH-5);
+      g.fillRect(x,trBot+2,1,4);
+      g.font=`700 ${fs}px ${css('--font-mono')}`;
+    }
+  }
+  // selected ORF
+  const rg=orfRange();
+  if(rg&&rg.e>rg.s){
+    const a=Math.max(0,rg.s),b=Math.min(n-1,rg.e-1);
+    g.fillStyle=css('--accent');
+    g.fillRect(X(locs[a])-sp*z/2,LETTER_Y+5,X(locs[b])-X(locs[a])+sp*z,3);
+  }
+  // trim shading
+  g.fillStyle=css('--trim-shade');
+  const [ts,te]=d.trim;
+  if(d.r.qual&&ts>0){const e=X((locs[ts-1]+locs[ts])/2);if(e>0)g.fillRect(0,0,Math.min(vw,e),CH);}
+  if(d.r.qual&&te<n){const e=X((locs[te-1]+locs[te])/2);if(e<vw)g.fillRect(Math.max(0,e),0,vw-Math.max(0,e),CH);}
+}
+function updateChromInfo(){
+  const el=$('chromInfo'),d=D;
+  if(S.focus<0||!d||S.focus>=d.L){el.textContent='Click a peak or a base to inspect it. Arrow keys move along the read.';return;}
+  const i=S.focus,r=d.r;
+  const kept=i>=d.trim[0]&&i<d.trim[1]||!r.qual;
+  el.textContent=`Base ${i+1} of ${d.L} · ${r.seq[i]}`+(r.qual?` · Q${r.qual[i]}`:'')+(r.trace?` · peak at sample ${r.trace.locs[i]}`:'')+(r.qual?(kept?' · kept':' · trimmed off'):'');
+}
+function focusBase(i,scroll){
+  if(!D||i<0||i>=D.L)return;
+  const old=S.focus;S.focus=i;
+  const sv=$('seqView');
+  if(old>=0){const o=sv.querySelector(`[data-i="${old}"]`);if(o)o.classList.remove('foc');}
+  const nw=sv.querySelector(`[data-i="${i}"]`);if(nw)nw.classList.add('foc');
+  if(scroll&&D.r.trace){
+    const sc=$('chromScroll');
+    sc.scrollLeft=Math.max(0,D.r.trace.locs[i]*S.zoom-sc.clientWidth/2);
+  }
+  drawChrom();updateChromInfo();
+}
+function ensureVisible(i){
+  const sc=$('chromScroll'),x=D.r.trace.locs[i]*S.zoom;
+  if(x<sc.scrollLeft+30||x>sc.scrollLeft+sc.clientWidth-30)sc.scrollLeft=Math.max(0,x-sc.clientWidth/2);
+}
+
+// sequence view
+function renderSeq(){
+  const d=D,sv=$('seqView'),r=d.r;
+  const cw=$('measure').getBoundingClientRect().width/20||7.8;
+  const avail=sv.clientWidth||600;
+  const groups=Math.max(1,Math.min(8,Math.floor((avail-6.2*cw)/(11*cw))));
+  const per=groups*10,rg=orfRange();
+  const out=[];
+  for(let ls=0;ls<d.L;ls+=per){
+    let line=`<div class="sl"><span class="sn">${ls+1}</span>`;
+    for(let gs=ls;gs<Math.min(d.L,ls+per);gs+=10){
+      line+='<span class="sg">';
+      for(let i=gs;i<Math.min(d.L,gs+10,ls+per);i++){
+        let c='b b-'+r.seq[i];
+        if(r.qual){const v=r.qual[i];if(v<20)c+=' ql';else if(v<30)c+=' qm';if(i<d.trim[0]||i>=d.trim[1])c+=' tr';}
+        if(rg&&i>=rg.s&&i<rg.e)c+=' sel';
+        if(i===S.focus)c+=' foc';
+        line+=`<span class="${c}" data-i="${i}">${r.seq[i]}</span>`;
+      }
+      line+='</span>';
+    }
+    out.push(line+'</div>');
+  }
+  sv.innerHTML=out.join('');
+}
+function renderExport(){
+  const d=D;
+  const hdr='>'+D.r.name+(d.reg[1]-d.reg[0]<d.L?` region=${d.reg[0]+1}-${d.reg[1]}`:'');
+  $('fastaOut').value=d.seq?hdr+'\n'+d.seq.replace(/(.{70})/g,'$1\n').trim():'';
+}
+
+// ORFs
+function orfRange(){
+  const o=S.orfList[S.orfSel];
+  if(!o||!D)return null;
+  return{s:o.start+D.reg[0],e:o.end+D.reg[0]};
+}
+function renderOrfs(){
+  const d=D,body=$('orfBody');
+  const key=[S.cur,d.reg.join('-'),S.minOrf,d.r.flipped].join('|');
+  S.orfList=d.seq.length>=3?findOrfs(d.seq,S.minOrf):[];
+  if(key!==S.orfKey){S.orfSel=0;S.orfKey=key;}
+  if(!S.orfList.length){
+    body.innerHTML=`<p class="empty">${d.seq.length?`No ORF of at least ${S.minOrf} amino acids starts with ATG in this region. Lower the minimum length to look for shorter ones.`:'There are no bases to scan.'}</p>`;
+    $('orfProtWrap').hidden=true;return;
+  }
+  const shown=S.orfList.slice(0,25);
+  const rows=shown.map((o,k)=>{
+    const a=o.start+d.reg[0]+1,b=o.end+d.reg[0];
+    return`<tr data-k="${k}" class="${k===S.orfSel?'pick':''}"><td><button class="btn small" type="button" data-k="${k}">${k+1}</button></td><td>${o.strand}${o.frame}</td><td>${fmt(a)}–${fmt(b)}</td><td>${o.aa}</td><td>${o.stop?'stop codon':'runs off the end'}</td></tr>`;
+  }).join('');
+  body.innerHTML=`<div class="scroll-x"><table class="tbl"><thead><tr><th>ORF</th><th>Strand, frame</th><th>Read position</th><th>Length (aa)</th><th>End</th></tr></thead><tbody>${rows}</tbody></table></div>`+
+    (S.orfList.length>shown.length?`<p class="note">Showing the longest ${shown.length} of ${S.orfList.length}.</p>`:'');
+  showProtein();
+}
+function showProtein(){
+  const o=S.orfList[S.orfSel];
+  if(!o){$('orfProtWrap').hidden=true;return;}
+  $('orfProtWrap').hidden=false;
+  $('protTitle').textContent=`ORF ${S.orfSel+1} · ${o.strand} strand, frame ${o.frame} · ${o.aa} aa`;
+  $('protBox').textContent=o.protein;
+}
+function pickOrf(k){
+  if(k===S.orfSel||!S.orfList[k])return;
+  S.orfSel=k;
+  document.querySelectorAll('#orfBody tbody tr').forEach(tr=>tr.classList.toggle('pick',+tr.dataset.k===k));
+  showProtein();renderSeq();drawChrom();
+}
+
+// alignment
+function parseRef(text){
+  const t=text.trim();
+  if(!t)return null;
+  if(t.startsWith('>')){
+    const recs=parseFasta(t);
+    if(!recs.length)throw new Error('The reference has a FASTA header but no bases.');
+    return{name:recs[0].name,seq:recs[0].seq,extra:recs.length-1};
+  }
+  const s=cleanSeq(t);
+  if(!s)throw new Error('No bases found in the reference.');
+  return{name:'reference',seq:s,extra:0};
+}
+function renderAlign(){
+  const d=D,body=$('alnBody'),note=$('refNote');
+  let ref;
+  try{ref=parseRef($('refInput').value);}catch(e){note.textContent='';body.innerHTML=`<p class="empty lowq">${esc(e.message)}</p>`;return;}
+  note.textContent=S.refIsExample?'This is an example reference that matches the example reads.':'';
+  if(!ref){body.innerHTML='<p class="empty">Paste a reference to align the analysed region against it. Both strands are tried.</p>';return;}
+  if(ref.extra)note.textContent=`Using the first of ${ref.extra+1} reference records (${ref.name}).`;
+  if(d.seq.length<8){body.innerHTML='<p class="empty">The analysed region is too short to align.</p>';return;}
+  let res;
+  try{res=alignBoth(d.seq,d.qual,ref.seq);}catch(e){body.innerHTML=`<p class="empty lowq">${esc(e.message)}</p>`;return;}
+  if(!res.a||res.score<20){body.innerHTML='<p class="empty">No significant alignment was found on either strand.</p>';return;}
+  const off=d.reg[0],n=res.n;
+  const rpos=qi=>res.strand==='+'?off+qi+1:off+(n-1-qi)+1;
+  const readA=res.strand==='+'?off+res.qStart+1:off+(n-res.qEnd)+1;
+  const readB=res.strand==='+'?off+res.qEnd:off+(n-res.qStart);
+  // differences
+  const diffs=[];
+  let k=0;
+  while(k<res.len){
+    const a=res.a[k],b=res.b[k];
+    if(a==='-'||b==='-'){
+      const type=a==='-'?'Deletion in read':'Insertion in read';
+      let e=k;while(e<res.len&&((type==='Deletion in read'&&res.a[e]==='-')||(type==='Insertion in read'&&res.b[e]==='-')))e++;
+      const seg=type==='Deletion in read'?res.b.slice(k,e):res.a.slice(k,e);
+      const ri=res.ri.slice(k,e).find(x=>x>=0),qi=res.qi.slice(k,e).find(x=>x>=0);
+      diffs.push({type,ref:type==='Deletion in read'?seg:'–',read:type==='Insertion in read'?seg:'–',refPos:ri!==undefined?ri+1:(res.ri.slice(0,k).filter(x=>x>=0).pop()??-1)+2,readPos:qi!==undefined?rpos(qi):null,q:null});
+      k=e;continue;
+    }
+    if(a!==b&&a!=='N'&&b!=='N'){
+      const qi=res.qi[k];
+      diffs.push({type:'Substitution',ref:b,read:a,refPos:res.ri[k]+1,readPos:rpos(qi),q:res.qual?res.qual[qi]:null});
+    }
+    k++;
+  }
+  const subs=diffs.filter(x=>x.type==='Substitution');
+  const lowSubs=subs.filter(x=>x.q!==null&&x.q<20).length;
+  const summary=`<p style="margin:0 0 10px"><strong>${res.strand==='+'?'Forward':'Reverse'} strand match.</strong> Read ${fmt(readA)}–${fmt(readB)} aligns to reference ${fmt(res.rStart+1)}–${fmt(res.rEnd)} (${fmt(res.rEnd-res.rStart)} bp). Identity ${res.identity.toFixed(1)}% with ${res.mismatches} mismatch${res.mismatches===1?'':'es'} and ${res.gaps} gap column${res.gaps===1?'':'s'}.`+
+    (res.strand==='-'?' The read was reverse complemented for this alignment.':'')+
+    (subs.length&&res.qual?` ${lowSubs} of ${subs.length} substitution${subs.length===1?'':'s'} fall${subs.length===1&&lowSubs===1?'s':''} at Q20 or below, so ${lowSubs===subs.length?'they are most likely base-calling noise':'check the trace at the others'}.`:'')+'</p>';
+  let tbl='';
+  if(diffs.length){
+    const rows=diffs.slice(0,40).map(x=>{
+      const low=x.q!==null&&x.q<20;
+      const nt=x.type!=='Substitution'?'Check the trace for a real indel or a mixed peak.':(x.q===null?'':low?'Low quality, likely a base-call error.':'Confident call, check the trace.');
+      return`<tr><td>${x.type}</td><td>${fmt(x.refPos)}</td><td>${esc(x.ref)}</td><td>${esc(x.read)}</td><td>${x.readPos===null?'–':fmt(x.readPos)}</td><td${low?' class="lowq"':''}>${x.q===null?'–':'Q'+x.q}</td><td class="note-cell">${nt}</td></tr>`;
+    }).join('');
+    tbl=`<span class="lbl">Differences from the reference</span><div class="scroll-x"><table class="tbl"><thead><tr><th>Type</th><th>Ref pos</th><th>Ref</th><th>Read</th><th>Read pos</th><th>Quality</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table></div>`+(diffs.length>40?`<p class="note">Showing the first 40 of ${diffs.length}.</p>`:'');
+  }else tbl='<p class="empty">No differences in the aligned region.</p>';
+  // alignment text
+  const cw=$('measure').getBoundingClientRect().width/20||7.8;
+  const avail=(body.clientWidth||600);
+  const cols=Math.max(20,Math.min(100,Math.floor(avail/(cw*0.96))-16));
+  let aln='';
+  for(let s=0;s<res.len;s+=cols){
+    const e=Math.min(res.len,s+cols);
+    const q1=res.qi.slice(s,e).find(x=>x>=0),r1=res.ri.slice(s,e).find(x=>x>=0);
+    const pad=(t,p)=>t.padEnd(5)+String(p===undefined?'':p).padStart(6)+'  ';
+    let top='',mid='',bot='';
+    for(let k=s;k<e;k++){
+      const a=res.a[k],b=res.b[k],m=res.mid[k];
+      const bad=a!==b&&a!=='-'&&b!=='-'&&a!=='N'&&b!=='N';
+      top+=a==='-'?`<span class="gp">-</span>`:bad?`<span class="mm">${a}</span>`:a;
+      bot+=b==='-'?`<span class="gp">-</span>`:bad?`<span class="mm">${b}</span>`:b;
+      mid+=m===' '?' ':`<span class="dim">|</span>`;
+    }
+    aln+=pad('Read',q1===undefined?undefined:rpos(q1))+top+'\n'+' '.repeat(13)+mid+'\n'+pad('Ref',r1===undefined?undefined:r1+1)+bot+'\n\n';
+  }
+  body.innerHTML=summary+tbl+`<span class="lbl" style="margin-top:14px">Alignment</span><pre class="aln">${aln.trimEnd()}</pre>`;
+}
+
+// consensus
+function part(r){
+  const L=r.seq.length;
+  const t=(S.useTrim&&r.qual)?mottTrim(r.qual,S.qcut):[0,L];
+  return{rec:r,off:t[0],seq:r.seq.slice(t[0],t[1]),qual:r.qual?r.qual.slice(t[0],t[1]):null};
+}
+function whyText(c){
+  if(c.kind==='fwd')return`Forward read is better by Q${c.fq-c.rq}.`;
+  if(c.kind==='rev')return`Reverse read is better by Q${c.rq-c.fq}.`;
+  if(c.kind==='amb')return'The reads are close in quality, so an ambiguity code is used.';
+  if(c.kind==='indel-kept')return'Base is in one read only. Kept because it is not weaker than the neighbouring bases of the other read.';
+  return'Base is in one read only. Dropped because it is weaker than the neighbouring bases of the other read.';
+}
+function renderConsensus(){
+  const body=$('consBody'),note=$('consNote');
+  const opts=S.recs.map(r=>`<option value="${r.id}">${esc(r.name)} (${fmt(r.seq.length)} bp)</option>`).join('');
+  $('consF').innerHTML=opts;$('consR').innerHTML=opts;
+  if(S.cons.f!==null)$('consF').value=String(S.cons.f);
+  if(S.cons.r!==null)$('consR').value=String(S.cons.r);
+  $('consOrient').value=S.cons.orient;
+  if(document.activeElement!==$('consMargin'))$('consMargin').value=S.cons.margin;
+  CR=null;$('consOut').value='';
+  $('btnCopyCons').disabled=true;$('btnUseCons').disabled=true;
+  const fr=S.recs.find(r=>r.id===S.cons.f),rr=S.recs.find(r=>r.id===S.cons.r);
+  note.textContent='';
+  if(S.recs.length<2||!fr||!rr){body.innerHTML='<p class="empty">Load a forward and a reverse read to build a consensus. Drop two files above, or use the example reads.</p>';return;}
+  if(fr.id===rr.id){body.innerHTML='<p class="empty">Choose two different reads.</p>';return;}
+  const F=part(fr),R=part(rr);
+  note.textContent=(S.useTrim&&(fr.qual||rr.qual))?`Each read is trimmed at Q${S.qcut} before the two are combined.`:'Full reads are used.';
+  if(F.seq.length<20||R.seq.length<20){body.innerHTML='<p class="empty">One of the reads has fewer than 20 bases left. Lower the trim threshold or choose other reads.</p>';return;}
+  let res;
+  try{res=buildConsensus({seq:F.seq,qual:F.qual},{seq:R.seq,qual:R.qual},{margin:S.cons.margin,orient:S.cons.orient});}
+  catch(e){body.innerHTML=`<p class="empty lowq">${esc(e.message)}</p>`;return;}
+  if(!res.ok){
+    body.innerHTML=`<p class="empty lowq">No usable overlap between these reads. The best local match is ${res.overlap} bp at ${res.identity.toFixed(0)}% identity. Check that both reads come from the same template and that the reverse read direction is right.</p>`;
+    return;
+  }
+  CR={res,F,R,fr,rr};
+  const cols=res.cols;
+  const cnt=k=>cols.filter(c=>c.kind===k).length;
+  const nRes=cnt('fwd')+cnt('rev'),nAmb=cnt('amb'),nInd=cnt('indel-kept')+cnt('indel-dropped');
+  const both=cols.filter(c=>c.f!==' '&&c.r!==' ').length;
+  const fOnly=cols.filter(c=>c.kind==='F').length,rOnly=cols.filter(c=>c.kind==='R').length;
+  const mq=res.qual.reduce((s,v)=>s+v,0)/res.qual.length;
+  const items=[
+    ['Consensus length',fmt(res.seq.length)+' bp'],
+    ['Overlap',fmt(both)+' columns'],
+    ['Overlap identity',res.identity.toFixed(1)+'%'],
+    ['Resolved by quality',String(nRes)],
+    ['Ambiguity codes',String(nAmb)],
+    ['Indel columns',String(nInd)],
+    ['Forward only',fmt(fOnly)+' bp'],
+    ['Reverse only',fmt(rOnly)+' bp'],
+    ['Mean quality','Q'+mq.toFixed(1)]
+  ];
+  let warn='';
+  if(res.identity<95)warn+=' Identity is below 95%, so check the reads before relying on this consensus.';
+  if(both<50)warn+=' The overlap is short, so the alignment may be unreliable.';
+  if(res.leftConflict||res.rightConflict)warn+=' Both reads extend past the overlap on '+(res.leftConflict&&res.rightConflict?'both ends':res.leftConflict?'the left end':'the right end')+' without matching, so the longer extension was kept.';
+  const summary=`<p style="margin:0 0 12px"><strong>Consensus built from ${esc(fr.name)} and ${esc(rr.name)}.</strong> ${res.flipped?'The reverse read was reverse complemented to match the forward read.':'The reverse read already runs in the same direction as the forward read.'}${warn}</p>`+
+    `<dl class="stats" style="margin-bottom:16px">${items.map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`+
+    `<span class="lbl">Coverage and consensus quality</span><canvas id="consMap" class="cmap" role="img" aria-label="Forward and reverse read coverage with consensus quality and disagreement marks"></canvas><p class="note" style="margin-bottom:14px">The shaded band is the overlap. Red lines mark columns where the reads disagree.</p>`;
+  let tbl='';
+  if(res.conflicts.length){
+    const rows=res.conflicts.slice(0,40).map(c=>{
+      const cell=(b,q)=>b===' '?'–':b==='-'?'gap':`${esc(b)} Q${q}`;
+      const pos=c.cpos!==null?fmt(c.cpos):'after '+fmt(c.near);
+      const called=c.c===''?'dropped':esc(c.c)+' Q'+c.q;
+      return`<tr><td>${pos}</td><td>${cell(c.f,c.fq)}</td><td>${cell(c.r,c.rq)}</td><td>${called}</td><td class="note-cell">${whyText(c)}</td></tr>`;
+    }).join('');
+    tbl=`<span class="lbl">Where the reads disagree</span><div class="scroll-x"><table class="tbl"><thead><tr><th>Consensus pos</th><th>Forward</th><th>Reverse</th><th>Called</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>`+(res.conflicts.length>40?`<p class="note">Showing the first 40 of ${res.conflicts.length}.</p>`:'');
+  }else tbl='<p class="empty">The reads agree at every overlapping base.</p>';
+  // text view
+  const cw=$('measure').getBoundingClientRect().width/20||7.8;
+  const avail=body.clientWidth||600;
+  const per=Math.max(20,Math.min(100,Math.floor(avail/(cw*0.96))-16));
+  const fpos=c=>c.fi>=0?F.off+c.fi+1:null;
+  const rpos=c=>c.ai>=0?R.off+(res.flipped?R.seq.length-1-c.ai:c.ai)+1:null;
+  const pad=(t,p)=>t.padEnd(5)+String(p===null||p===undefined?'':p).padStart(6)+'  ';
+  let view='';
+  for(let s=0;s<cols.length;s+=per){
+    const blk=cols.slice(s,s+per);
+    const p1=blk.find(c=>fpos(c)!==null),p2=blk.find(c=>rpos(c)!==null),p3=blk.find(c=>c.cpos!==null);
+    let a='',m='',b='',cc='';
+    for(const c of blk){
+      const hot=c.kind==='fwd'||c.kind==='rev'||c.kind==='amb';
+      const one=(ch)=>ch==='-'?'<span class="gp">-</span>':hot?`<span class="mm">${ch}</span>`:ch;
+      a+=one(c.f);b+=one(c.r);
+      m+=c.kind==='agree'?'<span class="dim">|</span>':' ';
+      if(c.c==='')cc+='<span class="gp">-</span>';
+      else if(c.kind==='amb')cc+=`<span class="mm">${c.c}</span>`;
+      else if(c.kind==='fwd'||c.kind==='rev'||c.kind==='indel-kept')cc+=`<span class="res">${c.c}</span>`;
+      else cc+=c.c;
+    }
+    view+=pad('Fwd',p1?fpos(p1):null)+a+'\n'+' '.repeat(13)+m+'\n'+pad('Rev',p2?rpos(p2):null)+b+'\n'+pad('Cons',p3?p3.cpos:null)+cc+'\n\n';
+  }
+  body.innerHTML=summary+tbl+`<span class="lbl" style="margin-top:14px">Read by read</span><pre class="aln">${view.trimEnd()}</pre>`;
+  $('consOut').value=`>${fr.name}+${rr.name}_consensus length=${res.seq.length}\n`+res.seq.replace(/(.{70})/g,'$1\n').trim();
+  $('btnCopyCons').disabled=false;$('btnUseCons').disabled=false;
+  drawConsMap();
+}
+function drawConsMap(){
+  const cv=$('consMap');if(!cv||!CR)return;
+  const cols=CR.res.cols,N=cols.length;
+  const W=Math.max(240,Math.floor(cv.parentElement.clientWidth)),H=160;
+  const g=fitCanvas(cv,W,H);
+  const ml=72,mr=8,pw=W-ml-mr,qTop=52,qBot=H-22,ph=qBot-qTop;
+  const xs=i=>ml+i/N*pw;
+  const span=fn=>{let a=-1,b=-1;cols.forEach((c,i)=>{if(fn(c)){if(a<0)a=i;b=i;}});return[a,b];};
+  const [fa,fb]=span(c=>c.f!==' '),[ra,rb]=span(c=>c.r!==' '),[oa,ob]=span(c=>c.f!==' '&&c.r!==' ');
+  g.fillStyle=css('--accent-soft');
+  if(oa>=0)g.fillRect(xs(oa),2,Math.max(2,xs(ob+1)-xs(oa)),qBot-2);
+  g.fillStyle=css('--q-good');
+  if(fa>=0)g.fillRect(xs(fa),10,xs(fb+1)-xs(fa),10);
+  if(ra>=0)g.fillRect(xs(ra),28,xs(rb+1)-xs(ra),10);
+  const muted=css('--muted');
+  g.font='11px '+css('--font-body');g.fillStyle=muted;g.textAlign='left';g.textBaseline='middle';
+  g.fillText('Forward',4,15);g.fillText('Reverse',4,33);
+  g.font='10px '+css('--font-mono');g.textAlign='right';
+  const ys=v=>qTop+(1-Math.min(60,v)/60)*ph;
+  for(const v of [0,20,30,60]){
+    g.strokeStyle=css('--line');g.lineWidth=1;g.setLineDash(v===20||v===30?[4,3]:[]);
+    g.beginPath();g.moveTo(ml,Math.round(ys(v))+.5);g.lineTo(W-mr,Math.round(ys(v))+.5);g.stroke();
+    g.fillStyle=muted;g.fillText('Q'+v,ml-5,ys(v));
+  }
+  g.setLineDash([]);
+  g.fillStyle=muted;g.font='11px '+css('--font-body');g.textAlign='left';g.fillText('Quality',4,qTop+ph/2);
+  const pts=[];cols.forEach((c,i)=>{if(c.q!==null)pts.push([i,c.q]);});
+  g.strokeStyle=css('--ink');g.lineWidth=1.5;g.beginPath();
+  pts.forEach(([i,q],k)=>{
+    let s=0,n=0;for(let j=Math.max(0,k-3);j<=Math.min(pts.length-1,k+3);j++){s+=pts[j][1];n++;}
+    const x=xs(i+.5),y=ys(s/n);k?g.lineTo(x,y):g.moveTo(x,y);
+  });
+  g.stroke();
+  g.strokeStyle=css('--q-bad');g.lineWidth=1.5;
+  for(const c of CR.res.conflicts){const i=cols.indexOf(c),x=Math.round(xs(i+.5))+.5;g.beginPath();g.moveTo(x,4);g.lineTo(x,qBot);g.stroke();}
+  g.font='10px '+css('--font-mono');g.fillStyle=muted;g.textBaseline='alphabetic';
+  g.textAlign='left';g.fillText('1',ml,H-6);
+  g.textAlign='right';g.fillText(String(CR.res.seq.length),W-mr,H-6);
+}
+
+// ---- events ----
+async function copyText(text,btn,el){
+  const old=btn.textContent;
+  try{await navigator.clipboard.writeText(text);btn.textContent='Copied';}
+  catch(e){if(el){el.focus&&el.focus();el.select&&el.select();}btn.textContent='Press Ctrl+C';}
+  setTimeout(()=>{btn.textContent=old;},1400);
+}
+$('btnOpen').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',e=>{if(e.target.files.length)loadFiles(Array.from(e.target.files));e.target.value='';});
+$('btnExample').addEventListener('click',loadExample);
+$('btnPaste').addEventListener('click',()=>{
+  try{
+    const recs=parseText($('pasteText').value,'Pasted_sequence');
+    if(S.refIsExample){$('refInput').value='';S.refIsExample=false;}
+    addRecords(recs);showMsg(`Loaded ${recs.length} pasted record${recs.length>1?'s':''}.`);
+  }catch(e){showMsg(e.message,true);}
+});
+const drop=$('drop');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{const f=Array.from(e.dataTransfer.files||[]);if(f.length)loadFiles(f);});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>e.preventDefault());
+$('sampleSelect').addEventListener('change',e=>selectRecord(+e.target.value));
+$('btnFlip').addEventListener('click',()=>{S.recs[S.cur]=flipRecord(S.recs[S.cur]);S.focus=-1;S.orfKey='';$('chromScroll').scrollLeft=0;renderAll();});
+$('qcut').addEventListener('input',e=>{S.qcut=+e.target.value;renderAll();});
+$('useTrim').addEventListener('change',e=>{S.useTrim=e.target.checked;renderAll();});
+$('minOrf').addEventListener('input',e=>{const v=Math.max(10,Math.min(2000,+e.target.value||40));S.minOrf=v;renderOrfs();renderSeq();drawChrom();});
+$('orfBody').addEventListener('click',e=>{const t=e.target.closest('[data-k]');if(t)pickOrf(+t.dataset.k);});
+$('seqView').addEventListener('click',e=>{const t=e.target.closest('[data-i]');if(t)focusBase(+t.dataset.i,true);});
+$('btnCopyFasta').addEventListener('click',e=>copyText($('fastaOut').value,e.currentTarget,$('fastaOut')));
+$('btnCopyProt').addEventListener('click',e=>{const o=S.orfList[S.orfSel];if(o)copyText(o.protein,e.currentTarget,null);});
+$('consF').addEventListener('change',e=>{S.cons.f=+e.target.value;renderConsensus();});
+$('consR').addEventListener('change',e=>{S.cons.r=+e.target.value;renderConsensus();});
+$('btnSwap').addEventListener('click',()=>{const t=S.cons.f;S.cons.f=S.cons.r;S.cons.r=t;renderConsensus();});
+$('consOrient').addEventListener('change',e=>{S.cons.orient=e.target.value;renderConsensus();});
+$('consMargin').addEventListener('input',e=>{const v=+e.target.value;S.cons.margin=Number.isFinite(v)?Math.max(0,Math.min(40,v)):10;renderConsensus();});
+$('btnCopyCons').addEventListener('click',e=>copyText($('consOut').value,e.currentTarget,$('consOut')));
+$('btnUseCons').addEventListener('click',()=>{
+  if(!CR)return;
+  const {res,fr,rr}=CR,name=`${fr.name}+${rr.name}_consensus`;
+  S.recs=S.recs.filter(r=>!(r.kind==='consensus'&&r.name===name));
+  addRecords([{name,seq:res.seq,qual:res.qual.slice(),trace:null,kind:'consensus',flipped:false}]);
+  showMsg(`Added ${name} as a sample. The summary, ORFs and reference alignment above now use it.`);
+  $('sampleBar').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+});
+$('btnToCons').addEventListener('click',()=>{
+  $('consPanel').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+});
+let refTimer=0;
+$('refInput').addEventListener('input',()=>{S.refIsExample=false;clearTimeout(refTimer);refTimer=setTimeout(renderAlign,300);});
+$('zoom').addEventListener('input',e=>{
+  const sc=$('chromScroll'),t=D&&D.r.trace;if(!t)return;
+  const center=(sc.scrollLeft+sc.clientWidth/2)/S.zoom;
+  S.zoom=+e.target.value;
+  $('chromSpacer').style.width=Math.ceil(t.length*S.zoom)+'px';
+  sc.scrollLeft=Math.max(0,center*S.zoom-sc.clientWidth/2);
+  drawChrom();
+});
+let raf=0;
+$('chromScroll').addEventListener('scroll',()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;drawChrom();});});
+$('chrom').addEventListener('click',e=>{
+  const t=D&&D.r.trace;if(!t)return;
+  const x=e.clientX-e.currentTarget.getBoundingClientRect().left;
+  focusBase(nearestBase(t.locs,($('chromScroll').scrollLeft+x)/S.zoom),false);
+});
+$('chromScroll').addEventListener('keydown',e=>{
+  if(!D||!D.r.trace)return;
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+  e.preventDefault();
+  const base=S.focus<0?nearestBase(D.r.trace.locs,($('chromScroll').scrollLeft+$('chromScroll').clientWidth/2)/S.zoom):S.focus;
+  const i=Math.max(0,Math.min(D.L-1,base+(e.key==='ArrowRight'?1:-1)));
+  ensureVisible(i);focusBase(i,false);
+});
+let lastW=0;
+const relayout=()=>{
+  const w=document.querySelector('.wrap').clientWidth;
+  if(w===lastW)return;lastW=w;
+  if(!D)return;
+  renderQProf();drawChrom();renderSeq();renderAlign();renderConsensus();
+};
+new ResizeObserver(()=>requestAnimationFrame(relayout)).observe(document.querySelector('.wrap'));
+const redraw=()=>{if(D){renderQProf();drawChrom();drawConsMap();}};
+try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',redraw);}catch(e){}
+new MutationObserver(redraw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(D){renderSeq();renderAlign();drawChrom();renderConsensus();}});
+
+loadExample();
+</script>
+
+</body></html>
